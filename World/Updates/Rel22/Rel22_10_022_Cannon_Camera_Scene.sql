@@ -82,6 +82,45 @@ BEGIN
         -- Triggered: the player is mid quest-reward and this must not be refused.
         (5, 93555, 0, 15, 93522, 0,     0,  0, 8,          0, 0, 0, 0, 0, 'The cannon camera takes over for seven seconds');
 
+        -- ---- from Gilneas_Cannons_Fire ----
+        -- Make the cannons actually fire during the shot at the end of `Save Krennan
+        -- Aranas` (14293). Timings and target come from a retail capture of this exact
+        -- sequence (Worgen Hunter, build 18019, Gilneas City), measured from the
+        -- turn-in:
+        --     +1.06s  93522 Cannon Camera
+        --     +1.53s  phase flips; the Commandeered Cannons appear
+        --     +5.09s  Cannon Fire
+        --     +6.60s  Cannon Fire
+        --     +10.33s Cannon Fire
+        -- Three shots, and `db_scripts`.`delay` is in seconds, so 5 / 7 / 10.
+        --
+        -- 1. The cannon needs somewhere to aim. 68235 `Cannon Fire` is
+        --    SPELL_EFFECT_TRIGGER_MISSILE at TARGET_SCRIPT_COORDINATES (46), which
+        --    reads `spell_script_target` - the same mechanism the Krennan rescue needed
+        --    in Rel22_07_038 - and it had no row, so the cannon had nothing to shoot at.
+        --
+        --    The target is 50471 `Afflicted Gilnean`: faction 2179, the same hostile
+        --    faction as the Bloodfang worgen, and 42 of them are already spawned in
+        --    phaseMask 8 - the phase this scene runs in - between 54 and 159 yards up
+        --    the approach from the cannon. 68235 reaches 150 yards (SpellRange 152), so
+        --    the nearest of them is well inside it, and the missile it triggers, 68236,
+        --    carries a 32 yard radius. The cannon fires on the advancing horde.
+        DELETE FROM `spell_script_target` WHERE `entry` = 68235;
+        INSERT INTO `spell_script_target` (`entry`, `type`, `targetEntry`, `inverseEffectMask`) VALUES
+        (68235, 1, 50471, 0);
+
+        -- 2. The shots themselves, hung off the same forcecast script that starts the
+        --    camera. The buddy becomes the SOURCE unless SCRIPT_FLAG_BUDDY_AS_TARGET is
+        --    set, so 35914 `Commandeered Cannon` is what casts; the nearer of the two is
+        --    the one the camera is pointed at, 16.5 yards from its eye. Triggered,
+        --    because a vehicle mid-scene should not be able to refuse the cast.
+        DELETE FROM `db_scripts` WHERE `script_type` = 5 AND `id` = 93555 AND `command` = 15 AND `datalong` = 68235;
+        INSERT INTO `db_scripts`
+            (`script_type`, `id`, `delay`, `command`, `datalong`, `datalong2`, `buddy_entry`, `search_radius`, `data_flags`, `dataint`, `x`, `y`, `z`, `o`, `comments`) VALUES
+        (5, 93555,  5, 15, 68235, 0, 35914, 60, 8, 0, 0, 0, 0, 0, 'The cannon opens fire'),
+        (5, 93555,  7, 15, 68235, 0, 35914, 60, 8, 0, 0, 0, 0, 0, 'Second shot'),
+        (5, 93555, 10, 15, 68235, 0, 35914, 60, 8, 0, 0, 0, 0, 0, 'Third shot, as the camera lets go');
+
         -- ---- from Cannon_Aims_At_Rippers ----
         -- The cannons were firing the wrong way. Rel22_07_044 aimed 68235 at 50471
         -- `Afflicted Gilnean`, which is the horde advancing on the barricade - 54 yards
